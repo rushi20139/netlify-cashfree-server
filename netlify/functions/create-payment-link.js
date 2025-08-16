@@ -1,22 +1,37 @@
 // netlify/functions/create-payment-link.js
-// Node 18+ on Netlify supports global fetch; otherwise `node-fetch` can be used.
 exports.handler = async (event, context) => {
-  // Allow only POST
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
-  }
-
-  // Basic CORS (adjust origin in production)
+  // Allowed origin for dev. Replace with your actual domains in production.
+  const ALLOWED_ORIGIN = 'http://localhost:4200'; // or '*' for open dev
   const corsHeaders = {
-    'Access-Control-Allow-Origin': '*', 
-    'Access-Control-Allow-Headers': 'Content-Type'
+    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    'Access-Control-Allow-Headers': 'Content-Type, Accept',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 
+  // Respond to preflight OPTIONS
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 204,
+      headers: corsHeaders,
+      body: ''
+    };
+  }
+
+  // Only POST creates the link
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      headers: corsHeaders,
+      body: 'Method Not Allowed'
+    };
+  }
+
+  // Parse JSON
   let body;
   try {
     body = JSON.parse(event.body || '{}');
   } catch (err) {
-    return { statusCode: 400, headers: corsHeaders, body: 'Invalid JSON' };
+    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'Invalid JSON' }) };
   }
 
   const { amount, name, email, phone, notes } = body;
@@ -68,3 +83,8 @@ exports.handler = async (event, context) => {
     return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: 'server error', details: String(err) }) };
   }
 };
+
+
+
+// TEST10761818a7392f8673c71c52baa781816701
+// cfsk_ma_test_57a37761034a2f7af2777bebdc792d77_257b48cc
