@@ -7,7 +7,7 @@ exports.handler = async (event, context) => {
 
 
   // Allowed origin for dev. Replace with your actual domains in production.
-  // const ALLOWED_ORIGIN = 'http://localhost:4200'; // or '*' for open dev
+  const ALLOWED_ORIGIN = '*'; // or '*' for open dev
   const corsHeaders = {
     'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
     'Access-Control-Allow-Headers': 'Content-Type, Accept',
