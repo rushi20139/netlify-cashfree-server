@@ -1,6 +1,5 @@
 // netlify/functions/initiate-easebuzz-payment.js
 
-const fetch = require('node-fetch');  // If using a newer Node or bundler, adjust import
 const crypto = require('crypto');
 
 // Handler
