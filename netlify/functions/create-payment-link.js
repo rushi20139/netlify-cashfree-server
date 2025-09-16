@@ -1,90 +1,130 @@
-// netlify/functions/create-payment-link.js
+// netlify/functions/initiate-easebuzz-payment.js
+
+const fetch = require('node-fetch');  // If using a newer Node or bundler, adjust import
+const crypto = require('crypto');
+
+// Handler
 exports.handler = async (event, context) => {
+
+
   // Allowed origin for dev. Replace with your actual domains in production.
-  const ALLOWED_ORIGIN = 'http://localhost:4200'; // or '*' for open dev
+  // const ALLOWED_ORIGIN = 'http://localhost:4200'; // or '*' for open dev
   const corsHeaders = {
     'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
     'Access-Control-Allow-Headers': 'Content-Type, Accept',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 
-  // Respond to preflight OPTIONS
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 204,
-      headers: corsHeaders,
-      body: ''
-    };
-  }
 
-  // Only POST creates the link
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
-      headers: corsHeaders,
-      body: 'Method Not Allowed'
+      body: JSON.stringify({ error: 'Method Not Allowed' }),
     };
   }
 
-  // Parse JSON
-  let body;
   try {
-    body = JSON.parse(event.body || '{}');
-  } catch (err) {
-    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'Invalid JSON' }) };
-  }
+    const body = JSON.parse(event.body);
 
-  const { amount, name, email, phone, notes } = body;
-  if (!amount || !email) {
-    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'amount and email required' }) };
-  }
+    // From front-end
+    const {
+      txnid,
+      amount,
+      firstname,
+      email,
+      phone,
+      productinfo,
+      success_url,
+      failure_url,
+      udf1 = '',
+      udf2 = '',
+      udf3 = '',
+      udf4 = '',
+      udf5 = ''
+    } = body;
 
-  const CF_BASE = process.env.CF_ENV === 'prod'
-    ? 'https://api.cashfree.com/pg/links'
-    : 'https://sandbox.cashfree.com/pg/links';
+    // From environment variables
+    const key = process.env.EASEBUZZ_KEY;
+    const salt = process.env.EASEBUZZ_SALT;
+    const initiateUrl = process.env.EASEBUZZ_INITIATE_URL; 
+      // e.g. "https://testpay.easebuzz.in/initiatePayment" or whatever Easebuzz requires
 
-  const payload = {
-    link_amount: Number(amount),
-    link_currency: 'INR',
-    link_purpose: 'Order Payment',
-    customer_details: {
-      customer_name: name || 'Customer',
-      customer_email: email,
-      customer_phone: phone || ''
-    },
-    link_notify: { send_email: true, send_sms: false },
-    link_notes: notes || {}
-  };
+    if (!key || !salt || !initiateUrl) {
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: 'Server configuration error: missing key/salt/url' }),
+      };
+    }
 
-  try {
-    const resp = await fetch(CF_BASE, {
+    // Build hash sequence: key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5|salt
+    const hashString = [
+      key,
+      txnid,
+      amount,
+      productinfo,
+      firstname,
+      email,
+      udf1,
+      udf2,
+      udf3,
+      udf4,
+      udf5,
+      salt
+    ].join('|');
+
+    const hash = crypto.createHash('sha512')
+                       .update(hashString)
+                       .digest('hex');
+
+    // Prepare the payload as required by Easebuzz
+    const payload = {
+      key,
+      txnid,
+      amount,
+      firstname,
+      email,
+      phone,
+      productinfo,
+      success_url,
+      failure_url,
+      udf1,
+      udf2,
+      udf3,
+      udf4,
+      udf5,
+      hash
+    };
+
+    // Make the server-to-server request to Easebuzz
+    const response = await fetch(initiateUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'x-api-version': '2025-01-01',
-        'x-client-id': 'TEST10761818a7392f8673c71c52baa781816701',
-        'x-client-secret': 'cfsk_ma_test_57a37761034a2f7af2777bebdc792d77_257b48cc'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
     });
 
-    const data = await resp.json();
-    if (!resp.ok) {
-      return { statusCode: resp.status || 502, headers: corsHeaders, body: JSON.stringify({ error: 'Cashfree API error', details: data }) };
+    const respJson = await response.json();
+
+    // Check Easebuzz response, extract payment link or access key etc.
+    if (!response.ok) {
+      return {
+        statusCode: response.status,
+        body: JSON.stringify({ error: 'Easebuzz error', details: respJson }),
+      };
     }
 
+    // Assume the response gives something like { payment_link: "...", etc. } 
+    // (You’ll have to check Easebuzz docs for the exact response field name.)
     return {
       statusCode: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ link: data.link_url, link_id: data.link_id, raw: data })
+      body: JSON.stringify({ success: true, data: respJson }),
     };
-  } catch (err) {
-    console.error('Function error', err);
-    return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: 'server error', details: String(err) }) };
+
+  } catch (error) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: error.message }),
+    };
   }
 };
-
-
-
-// TEST10761818a7392f8673c71c52baa781816701
-// cfsk_ma_test_57a37761034a2f7af2777bebdc792d77_257b48cc
