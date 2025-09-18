@@ -1,23 +1,30 @@
 // netlify/functions/initiate-easebuzz-payment.js
 
 const crypto = require('crypto');
+const fetch = require('node-fetch'); // Netlify doesn’t have fetch in Node 14/16 runtime by default
 
-// Handler
 exports.handler = async (event, context) => {
-
-
-  // Allowed origin for dev. Replace with your actual domains in production.
-  const ALLOWED_ORIGIN = '*'; // or '*' for open dev
+  // ✅ CORS headers
+  const ALLOWED_ORIGIN = '*'; // Change to your domain in prod
   const corsHeaders = {
     'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
     'Access-Control-Allow-Headers': 'Content-Type, Accept',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 
+  // ✅ Handle preflight request
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: 'OK',
+    };
+  }
 
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
+      headers: corsHeaders,
       body: JSON.stringify({ error: 'Method Not Allowed' }),
     };
   }
@@ -25,7 +32,7 @@ exports.handler = async (event, context) => {
   try {
     const body = JSON.parse(event.body);
 
-    // From front-end
+    // ✅ From frontend
     const {
       txnid,
       amount,
@@ -39,23 +46,24 @@ exports.handler = async (event, context) => {
       udf2 = '',
       udf3 = '',
       udf4 = '',
-      udf5 = ''
+      udf5 = '',
     } = body;
 
-    // From environment variables
+    // ✅ From environment
     const key = process.env.EASEBUZZ_KEY;
     const salt = process.env.EASEBUZZ_SALT;
     const initiateUrl = process.env.EASEBUZZ_INITIATE_URL; 
-      // e.g. "https://testpay.easebuzz.in/initiatePayment" or whatever Easebuzz requires
+    // Example: https://testpay.easebuzz.in/payment/initiateLink
 
     if (!key || !salt || !initiateUrl) {
       return {
         statusCode: 500,
-        body: JSON.stringify({ error: 'Server configuration error: missing key/salt/url' }),
+        headers: corsHeaders,
+        body: JSON.stringify({ error: 'Server config error: missing key/salt/url' }),
       };
     }
 
-    // Build hash sequence: key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5|salt
+    // ✅ Build hash
     const hashString = [
       key,
       txnid,
@@ -68,14 +76,14 @@ exports.handler = async (event, context) => {
       udf3,
       udf4,
       udf5,
-      salt
+      salt,
     ].join('|');
 
     const hash = crypto.createHash('sha512')
-                       .update(hashString)
-                       .digest('hex');
+      .update(hashString)
+      .digest('hex');
 
-    // Prepare the payload as required by Easebuzz
+    // ✅ Payload for Easebuzz
     const payload = {
       key,
       txnid,
@@ -91,38 +99,37 @@ exports.handler = async (event, context) => {
       udf3,
       udf4,
       udf5,
-      hash
+      hash,
     };
 
-    // Make the server-to-server request to Easebuzz
+    // ✅ Server-to-server call
     const response = await fetch(initiateUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
 
     const respJson = await response.json();
 
-    // Check Easebuzz response, extract payment link or access key etc.
     if (!response.ok) {
       return {
         statusCode: response.status,
+        headers: corsHeaders,
         body: JSON.stringify({ error: 'Easebuzz error', details: respJson }),
       };
     }
 
-    // Assume the response gives something like { payment_link: "...", etc. } 
-    // (You’ll have to check Easebuzz docs for the exact response field name.)
+    // ✅ Success response
     return {
       statusCode: 200,
+      headers: corsHeaders,
       body: JSON.stringify({ success: true, data: respJson }),
     };
 
   } catch (error) {
     return {
       statusCode: 500,
+      headers: corsHeaders,
       body: JSON.stringify({ error: error.message }),
     };
   }
