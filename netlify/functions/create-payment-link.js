@@ -4,21 +4,27 @@ const fetch = require('node-fetch'); // npm install node-fetch@2
 const querystring = require('querystring');
 
 exports.handler = async (event, context) => {
-if (event.httpMethod === "OPTIONS") {
-    return {
-      statusCode: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*", // or restrict to "http://localhost:4200"
-        "Access-Control-Allow-Headers": "Content-Type, Referer",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-      },
-      body: "Preflight OK",
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*", // or restrict to your frontend origin
+      "Access-Control-Allow-Headers": "Content-Type", // remove Referer
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
     };
-  }
-
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: corsHeaders, body: 'Method Not Allowed' };
-  }
+    
+    if (event.httpMethod === "OPTIONS") {
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: "Preflight OK",
+      };
+    }
+    
+    if (event.httpMethod !== "POST") {
+      return {
+        statusCode: 405,
+        headers: corsHeaders,
+        body: "Method Not Allowed",
+      };
+    }
 
   try {
     // const data = JSON.parse(event.body);
