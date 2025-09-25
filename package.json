@@ -1,0 +1,10 @@
+{
+  "name": "netlifycashfreeserver",
+  "version": "1.0.0",
+  "description": "Netlify functions project",
+  "main": "index.js",
+  "scripts": {},
+  "dependencies": {
+    "node-fetch": "^2.6.7" 
+  }
+}
