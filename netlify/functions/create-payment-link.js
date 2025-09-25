@@ -31,8 +31,8 @@ exports.handler = async (event, context) => {
     const data = querystring.parse(event.body);
 
     // Env variables
-    const MERCHANT_KEY = process.env.MERCHANT_KEY;
-    const SALT = process.env.SALT;
+    const MERCHANT_KEY = process.env.EASEBUZZ_KEY;
+    const SALT = process.env.EASEBUZZ_SALT;
     const REFERER = 'https://lumiradiamonds.in';
 
     if (!MERCHANT_KEY || !SALT) {
