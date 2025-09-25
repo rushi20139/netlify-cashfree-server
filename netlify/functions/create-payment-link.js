@@ -4,14 +4,16 @@ const fetch = require('node-fetch'); // npm install node-fetch@2
 const querystring = require('querystring');
 
 exports.handler = async (event, context) => {
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Accept',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  };
-
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers: corsHeaders, body: 'OK' };
+if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*", // or restrict to "http://localhost:4200"
+        "Access-Control-Allow-Headers": "Content-Type, Referer",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+      },
+      body: "Preflight OK",
+    };
   }
 
   if (event.httpMethod !== 'POST') {
