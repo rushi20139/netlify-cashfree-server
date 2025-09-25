@@ -1,136 +1,106 @@
-// netlify/functions/initiate-easebuzz-payment.js
-
+// netlify/functions/initiate-easebuzz.js
 const crypto = require('crypto');
-const fetch = require('node-fetch'); // Netlify doesn’t have fetch in Node 14/16 runtime by default
+const fetch = require('node-fetch'); // npm install node-fetch@2
+const querystring = require('querystring');
 
 exports.handler = async (event, context) => {
-  // ✅ CORS headers
-  const ALLOWED_ORIGIN = '*'; // Change to your domain in prod
   const corsHeaders = {
-    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Accept',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 
-  // ✅ Handle preflight request
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: corsHeaders,
-      body: 'OK',
-    };
+    return { statusCode: 200, headers: corsHeaders, body: 'OK' };
   }
 
   if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: 'Method Not Allowed' }),
-    };
+    return { statusCode: 405, headers: corsHeaders, body: 'Method Not Allowed' };
   }
 
   try {
-    const body = JSON.parse(event.body);
+    // const data = JSON.parse(event.body);
+    const data = querystring.parse(event.body);
 
-    // ✅ From frontend
-    const {
-      txnid,
-      amount,
-      firstname,
-      email,
-      phone,
-      productinfo,
-      success_url,
-      failure_url,
-      udf1 = '',
-      udf2 = '',
-      udf3 = '',
-      udf4 = '',
-      udf5 = '',
-    } = body;
+    // Env variables
+    const MERCHANT_KEY = process.env.MERCHANT_KEY;
+    const SALT = process.env.SALT;
+    const REFERER = 'https://lumiradiamonds.in';
 
-    // ✅ From environment
-    const key = process.env.EASEBUZZ_KEY;
-    const salt = process.env.EASEBUZZ_SALT;
-    const initiateUrl = process.env.EASEBUZZ_INITIATE_URL; 
-    // Example: https://testpay.easebuzz.in/payment/initiateLink
+    if (!MERCHANT_KEY || !SALT) {
+      return { statusCode: 500, headers: corsHeaders, body: 'Missing MERCHANT_KEY or SALT in env' };
+    }
 
-    if (!key || !salt || !initiateUrl) {
+    // Fill missing udf fields if undefined
+    for (let i = 1; i <= 10; i++) {
+      if (!data[`udf${i}`]) data[`udf${i}`] = '';
+    }
+
+    // Generate hash (same as Python)
+    const hashSequence = [
+      'key','txnid','amount','productinfo','name','email',
+      'udf1','udf2','udf3','udf4','udf5','udf6','udf7','udf8','udf9','udf10'
+    ];
+
+    let hashString = '';
+    for (const key of hashSequence) {
+      if (key === 'key') hashString += MERCHANT_KEY + '|';
+      else hashString += (data[key] || '') + '|';
+    }
+    hashString += SALT;
+
+    const hash = crypto.createHash('sha512').update(hashString).digest('hex').toLowerCase();
+
+    // Build payload
+    const payload = {
+      key: MERCHANT_KEY,
+      txnid: data.txnid,
+      amount: data.amount,
+      firstname: data.name,
+      email: data.email,
+      phone: data.phone,
+      productinfo: data.productinfo,
+      surl: data.surl,
+      furl: data.furl,
+      hash,
+      ...data, // includes udf1-udf10 and any other extra fields
+    };
+
+    console.log('Payload being sent:', payload);
+
+    const callUrl = 'https://pay.easebuzz.in/payment/initiateLink/';
+
+    const response = await fetch(callUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Referer': REFERER,
+      },
+      body: querystring.stringify(payload),
+    });
+
+    let respJson;
+    try {
+      respJson = await response.json();
+    } catch (err) {
       return {
         statusCode: 500,
         headers: corsHeaders,
-        body: JSON.stringify({ error: 'Server config error: missing key/salt/url' }),
+        body: JSON.stringify({ error: 'Failed to parse JSON', raw: await response.text() }),
       };
     }
 
-    // ✅ Build hash
-    const hashString = [
-      key,
-      txnid,
-      amount,
-      productinfo,
-      firstname,
-      email,
-      udf1,
-      udf2,
-      udf3,
-      udf4,
-      udf5,
-      salt,
-    ].join('|');
-
-    const hash = crypto.createHash('sha512')
-      .update(hashString)
-      .digest('hex');
-
-    // ✅ Payload for Easebuzz
-    const payload = {
-      key,
-      txnid,
-      amount,
-      firstname,
-      email,
-      phone,
-      productinfo,
-      success_url,
-      failure_url,
-      udf1,
-      udf2,
-      udf3,
-      udf4,
-      udf5,
-      hash,
-    };
-
-    // ✅ Server-to-server call
-    const response = await fetch(initiateUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const respJson = await response.json();
-
-    if (!response.ok) {
-      return {
-        statusCode: response.status,
-        headers: corsHeaders,
-        body: JSON.stringify({ error: 'Easebuzz error', details: respJson }),
-      };
-    }
-
-    // ✅ Success response
     return {
       statusCode: 200,
       headers: corsHeaders,
-      body: JSON.stringify({ success: true, data: respJson }),
+      body: JSON.stringify(respJson),
     };
 
-  } catch (error) {
+  } catch (err) {
     return {
       statusCode: 500,
       headers: corsHeaders,
-      body: JSON.stringify({ error: error.message }),
+      body: JSON.stringify({ error: err.message }),
     };
   }
 };
